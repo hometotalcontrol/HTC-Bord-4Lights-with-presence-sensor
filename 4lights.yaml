@@ -1,9 +1,8 @@
 substitutions:
-  device_name: "lights-controller"
+  device_name: "lights-controler"
   upper_device_name: "Living Rooom"
   id_dev: "living"
   backlight_name: "Backlight"
- 
   button_brightness: "100%"
   pin_fastled: "16"
 
@@ -28,8 +27,78 @@ substitutions:
   pin_gpio_2: "27"
   pin_gpio_3: "14"
 
+esp32:
+  board: esp32dev #esp32-c3-devkitm-1
+  framework:
+    type: arduino #esp-idf
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${upper_device_name}
+
+preferences:
+  flash_write_interval: 10min
+
+logger:
+  baud_rate: 0
+
+api:
+  encryption:
+    key: 
+
+wifi:
+  ap:
+    ssid: "${upper_device_name} Hotspot"
+
+captive_portal:
+
+ota:
+  platform: esphome
+
+button:
+  - platform: restart
+    id: btn_${id_dev}_restart
+    name: "${upper_device_name} Restart"
+
 esp32_touch:
   setup_mode: False
+
+uart:
+  - id: uart_0
+    tx_pin: 1
+    rx_pin: 3
+    baud_rate: 256000
+    parity: NONE
+    stop_bits: 1
+
+ld2410:
+  uart_id: uart_0
+
+globals:
+  - id: lights_off_countdown_${id_dev}
+    type: int
+    restore_value: yes
+    initial_value: "3"
+
+  - id: led_on
+    type: int [3]
+    restore_value: yes
+    initial_value: ${on_color}
+  
+  - id: led_off
+    type: int [3]
+    restore_value: yes
+    initial_value: ${off_color}
+
+  - id: led_eco
+    type: int [3]
+    restore_value: yes
+    initial_value: ${eco_color}
+
+  - id: lights_off_countdown_${id_dev}
+    type: int
+    restore_value: yes
+    initial_value: "3"
 
 output:
   - platform: gpio
@@ -164,26 +233,25 @@ binary_sensor:
       then:
         - light.toggle: light_bin_3_${id_dev}
 
-globals:
-  - id: led_on
-    type: int [3]
-    restore_value: yes
-    initial_value: ${on_color}
-  
-  - id: led_off
-    type: int [3]
-    restore_value: yes
-    initial_value: ${off_color}
+  - platform: ld2410
+    has_target:
+      name: "Presence"
+      id: bsen_ld_prezenta_${id_dev}
+      device_class: presence
+      on_press:
+        then:
+          - lambda: "id(lights_off_countdown_${id_dev}) = id(num_time_lights_off_${id_dev}).state;"
+          - light.turn_on: light_mono_backlight_${id_dev}
+          - if:
+              condition:
+                - switch.is_on: sw_tem_auto_turn_on_lights_${id_dev}
+              then:
+                - script.execute: lights_to_turn_on
 
-  - id: led_eco
-    type: int [3]
-    restore_value: yes
-    initial_value: ${eco_color}
-
-  - id: lights_off_countdown_${id_dev}
-    type: int
-    restore_value: yes
-    initial_value: "3"
+    has_moving_target:
+      name: "Moving"
+      id: bsen_ld_miscare_${id_dev}
+      device_class: motion
 
 number:
   - platform: template
@@ -207,7 +275,9 @@ time:
         then:
           - if:
               condition:
-                - switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+                and:
+                  - switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+                  - binary_sensor.is_off: bsen_ld_prezenta_${id_dev}
               then:
                 - if:
                     condition:

@@ -1,0 +1,384 @@
+substitutions:
+  device_name: "lights-controller"
+  upper_device_name: "Living Rooom"
+  id_dev: "living"
+  backlight_name: "Backlight"
+ 
+  button_brightness: "100%"
+  pin_fastled: "16"
+
+  # GPIO0, GPIO2, GPIO4, GPIO12, GPIO13, GPIO15
+  pin_touch_0: "0"
+  pin_touch_1: "2"
+  pin_touch_2: "4"
+  pin_touch_3: "15"
+
+  light_0_name: "Light0" 
+  light_1_name: "Light1"
+  light_2_name: "Light2"
+  light_3_name: "Light3"
+
+  on_color: "{100, 0, 0}"
+  off_color: "{0, 0, 100}"
+  eco_color: "{0, 100, 0}"
+
+  #these pins are hardwired to triacs
+  pin_gpio_0: "32"
+  pin_gpio_1: "33"
+  pin_gpio_2: "27"
+  pin_gpio_3: "14"
+
+esp32_touch:
+  setup_mode: False
+
+output:
+  - platform: gpio
+    id: output_gpio_0_${id_dev}
+    pin: ${pin_gpio_0}
+  - platform: gpio
+    id: output_gpio_1_${id_dev}
+    pin: ${pin_gpio_1}
+  - platform: gpio
+    id: output_gpio_2_${id_dev}
+    pin: ${pin_gpio_2}
+  - platform: gpio
+    id: output_gpio_3_${id_dev}
+    pin: ${pin_gpio_3}
+
+light:
+  - platform: fastled_clockless
+    id: light_fclk_touch_backlight
+    name: "${backlight_name}"
+    icon: mdi:led-on
+    chipset: WS2812
+    pin: ${pin_fastled}
+    num_leds: 4
+    rgb_order: RGB
+    color_correct: [65%, 100%, 100%]
+    #restore_mode: ALWAYS_ON
+
+  - platform: binary
+    id: light_bin_0_${id_dev}
+    name: ${light_0_name}
+    #icon: mdi:wall-sconce-flat
+    output: output_gpio_0_${id_dev}
+    on_turn_on:
+      then:
+        - lambda: "id(lights_off_countdown_${id_dev}) = id(num_time_lights_off_${id_dev}).state;"
+    on_state: 
+      then:
+        - script.execute: set_touch_backlights
+
+  - platform: binary
+    id: light_bin_1_${id_dev}
+    name: ${light_1_name}
+    output: output_gpio_1_${id_dev}
+    #icon: mdi:ceiling-light
+    on_turn_on:
+      then:
+        - lambda: "id(lights_off_countdown_${id_dev}) = id(num_time_lights_off_${id_dev}).state;"
+    on_state: 
+      then:
+        - script.execute: set_touch_backlights
+
+  - platform: binary
+    id: light_bin_2_${id_dev}
+    name: ${light_2_name}
+    output: output_gpio_2_${id_dev}
+    #icon: mdi:ceiling-light
+    on_turn_on:
+      then:
+        - lambda: "id(lights_off_countdown_${id_dev}) = id(num_time_lights_off_${id_dev}).state;"
+    on_state: 
+      then:
+        - script.execute: set_touch_backlights
+
+  - platform: binary
+    id: light_bin_3_${id_dev}
+    name: ${light_3_name} 
+    #icon: mdi:ceiling-light-multiple
+    output: output_gpio_3_${id_dev}
+    on_turn_on:
+      then:
+        - lambda: "id(lights_off_countdown_${id_dev}) = id(num_time_lights_off_${id_dev}).state;"
+    on_state: 
+      then:
+        - script.execute: set_touch_backlights
+
+switch:
+  - platform: template
+    name: "Auto Turn Off Lights"
+    id: sw_tem_auto_turn_off_lights_${id_dev}
+    optimistic : True
+    restore_mode: RESTORE_DEFAULT_ON
+    icon: mdi:toggle-switch-outline
+    on_turn_off:
+      - switch.turn_off: sw_tem_auto_turn_on_lights_${id_dev}
+  - platform: template
+    name: "Auto Turn On Lights"
+    id: sw_tem_auto_turn_on_lights_${id_dev}
+    optimistic : True
+    restore_mode: RESTORE_DEFAULT_OFF
+    icon: mdi:toggle-switch-outline
+    on_turn_on:
+      - switch.turn_on: sw_tem_auto_turn_off_lights_${id_dev}
+
+binary_sensor:
+  - platform: esp32_touch
+    id: bsen_tch_0_${id_dev}
+    pin: ${pin_touch_0}
+    threshold: 700
+    filters:
+      - settle: 250ms
+    on_press:
+      then:
+        - light.toggle: light_bin_0_${id_dev}
+
+  - platform: esp32_touch
+    id: bsen_tch_1_${id_dev}
+    pin: ${pin_touch_1}
+    threshold: 700
+    filters:
+      - settle: 250ms
+    on_press:
+      then:
+        - light.toggle: light_bin_1_${id_dev}
+
+  - platform: esp32_touch
+    id: bsen_tch_2_${id_dev}
+    pin: ${pin_touch_2}
+    threshold: 700
+    filters:
+      - settle: 250ms
+    on_press:
+      then:
+        - light.toggle: light_bin_2_${id_dev}
+
+  - platform: esp32_touch
+    id: bsen_tch_3_${id_dev}
+    pin: ${pin_touch_3}
+    threshold: 700
+    filters:
+      - settle: 250ms
+    on_press:
+      then:
+        - light.toggle: light_bin_3_${id_dev}
+
+globals:
+  - id: led_on
+    type: int [3]
+    restore_value: yes
+    initial_value: ${on_color}
+  
+  - id: led_off
+    type: int [3]
+    restore_value: yes
+    initial_value: ${off_color}
+
+  - id: led_eco
+    type: int [3]
+    restore_value: yes
+    initial_value: ${eco_color}
+
+  - id: lights_off_countdown_${id_dev}
+    type: int
+    restore_value: yes
+    initial_value: "3"
+
+number:
+  - platform: template
+    name: "Time Auto Turn off"
+    id: num_time_lights_off_${id_dev}
+    optimistic: true
+    mode: box # auto box or slider
+    min_value: 1
+    max_value: 30
+    step: 1
+    initial_value: 3
+    restore_value: True
+    unit_of_measurement : min
+    icon: mdi:timer-stop
+
+time:
+  - platform: homeassistant
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          - if:
+              condition:
+                - switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+              then:
+                - if:
+                    condition:
+                      - lambda: 'return id(lights_off_countdown_${id_dev}) <= 0;'
+                    then:
+                      - script.execute: lights_to_turn_off
+                    else:
+                      - lambda: "id(lights_off_countdown_${id_dev}) -= 1;"
+          - if:
+              condition:
+                - for:
+                    time: 3min
+                    condition:
+                      binary_sensor.is_off: bsen_ld_prezenta_${id_dev}
+              then:
+                - light.turn_off:
+                    id: light_fclk_touch_backlight
+                    transition_length: 3s
+
+script:
+  - id: set_touch_backlights
+    then:
+      - if:
+          condition:
+            light.is_on: light_bin_0_${id_dev}
+          then:
+            - if: 
+                condition:
+                  switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+                then:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 0
+                      range_to: 0
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_eco)[0]/100.0;"
+                      green: !lambda "return id(led_eco)[1]/100.0;"
+                      blue:  !lambda "return id(led_eco)[2]/100.0;"
+                else:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 0
+                      range_to: 0
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_on)[0]/100.0;"
+                      green: !lambda "return id(led_on)[1]/100.0;"
+                      blue:  !lambda "return id(led_on)[2]/100.0;"
+          else:
+            - light.addressable_set:
+                id: light_fclk_touch_backlight
+                range_from: 0
+                range_to: 0
+                color_brightness: ${button_brightness}
+                red: !lambda "return id(led_off)[0]/100.0;"
+                green: !lambda "return id(led_off)[1]/100.0;"
+                blue:  !lambda "return id(led_off)[2]/100.0;"
+
+      - if:
+          condition:
+            light.is_on: light_bin_1_${id_dev}
+          then:
+            - if: 
+                condition:
+                  switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+                then:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 1
+                      range_to: 1
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_eco)[0]/100.0;"
+                      green: !lambda "return id(led_eco)[1]/100.0;"
+                      blue:  !lambda "return id(led_eco)[2]/100.0;"
+                else:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 1
+                      range_to: 1
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_on)[0]/100.0;"
+                      green: !lambda "return id(led_on)[1]/100.0;"
+                      blue:  !lambda "return id(led_on)[2]/100.0;"
+          else:
+            - light.addressable_set:
+                id: light_fclk_touch_backlight
+                range_from: 1
+                range_to: 1
+                color_brightness: ${button_brightness}
+                red: !lambda "return id(led_off)[0]/100.0;"
+                green: !lambda "return id(led_off)[1]/100.0;"
+                blue:  !lambda "return id(led_off)[2]/100.0;"
+
+       - if:
+          condition:
+            light.is_on: light_bin_0_${id_dev}
+          then:
+            - if: 
+                condition:
+                  switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+                then:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 2
+                      range_to: 2
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_eco)[0]/100.0;"
+                      green: !lambda "return id(led_eco)[1]/100.0;"
+                      blue:  !lambda "return id(led_eco)[2]/100.0;"
+                else:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 2
+                      range_to: 2
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_on)[0]/100.0;"
+                      green: !lambda "return id(led_on)[1]/100.0;"
+                      blue:  !lambda "return id(led_on)[2]/100.0;"
+          else:
+            - light.addressable_set:
+                id: light_fclk_touch_backlight
+                range_from: 2
+                range_to: 2
+                color_brightness: ${button_brightness}
+                red: !lambda "return id(led_off)[0]/100.0;"
+                green: !lambda "return id(led_off)[1]/100.0;"
+                blue:  !lambda "return id(led_off)[2]/100.0;"
+
+      - if:
+          condition:
+            light.is_on: light_bin_3_${id_dev}
+          then:
+            - if: 
+                condition:
+                  switch.is_on: sw_tem_auto_turn_off_lights_${id_dev}
+                then:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 3
+                      range_to: 3
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_eco)[0]/100.0;"
+                      green: !lambda "return id(led_eco)[1]/100.0;"
+                      blue:  !lambda "return id(led_eco)[2]/100.0;"
+                else:
+                  - light.addressable_set:
+                      id: light_fclk_touch_backlight
+                      range_from: 3
+                      range_to: 3
+                      color_brightness: ${button_brightness}
+                      red: !lambda "return id(led_on)[0]/100.0;"
+                      green: !lambda "return id(led_on)[1]/100.0;"
+                      blue:  !lambda "return id(led_on)[2]/100.0;"
+          else:
+            - light.addressable_set:
+                id: light_fclk_touch_backlight
+                range_from: 3
+                range_to: 3
+                color_brightness: ${button_brightness}
+                red: !lambda "return id(led_off)[0]/100.0;"
+                green: !lambda "return id(led_off)[1]/100.0;"
+                blue:  !lambda "return id(led_off)[2]/100.0;"
+
+  - id: lights_to_turn_on
+    then:
+      - light.turn_on: light_bin_0_${id_dev}
+      - light.turn_on: light_bin_1_${id_dev}
+      - light.turn_on: light_bin_2_${id_dev}
+      - light.turn_on: light_bin_3_${id_dev}
+  - id: lights_to_turn_off
+    then:
+      - light.turn_off: light_bin_0_${id_dev}
+      - light.turn_off: light_bin_1_${id_dev}
+      - light.turn_off: light_bin_2_${id_dev}
+      - light.turn_off: light_bin_3_${id_dev}
